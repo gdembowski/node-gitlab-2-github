@@ -10,6 +10,7 @@ import {
 } from '@gitbeaker/core/dist/types/types';
 import { GitlabSettings } from './settings';
 import axios from 'axios';
+import settings from '../settings';
 
 export type GitLabDiscussion = DiscussionSchema;
 export type GitLabDiscussionNote = DiscussionNote;
@@ -18,6 +19,14 @@ export type GitLabNote = NoteSchema;
 export type GitLabUser = Omit<UserSchema, 'created_at'>;
 export type GitLabMilestone = MilestoneSchema;
 export type GitLabMergeRequest = MergeRequestSchema;
+
+export type GitLabExpandedMergeRequestSchema = GitLabMergeRequest & {
+  diff_refs: {
+    base_sha: string;
+    head_sha: string;
+    start_sha: string;
+  };
+};
 
 export class GitlabHelper {
   // Wait for this issue to be resolved
@@ -206,6 +215,20 @@ export class GitlabHelper {
         `Could not fetch notes for GitLab merge request #${pullRequestIid}.`
       );
       return [];
+    }
+  }
+
+  async getExpandedMergeRequest(mergeRequestIid: number): Promise<GitLabExpandedMergeRequestSchema> {
+    try {
+      const gitlabUrl = settings.gitlab.url ? settings.gitlab.url : 'http://gitlab.com';
+      const requestUrl = `${gitlabUrl}/api/v4/projects/${encodeURIComponent(this.gitlabProjectId)}/merge_requests/${mergeRequestIid}`;
+      const { data } = await axios.get<GitLabExpandedMergeRequestSchema>(requestUrl, {
+        headers: { 'Private-Token': this.gitlabToken },
+      });
+      return data;
+    } catch (err) {
+      console.error(`Could not fetch GitLab merge request !${mergeRequestIid}`);
+      throw err;
     }
   }
 }

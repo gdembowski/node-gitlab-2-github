@@ -76,6 +76,7 @@ export class GithubHelper {
   repoId?: number;
   delayInMs: number;
   useIssuesForAllMergeRequests: boolean;
+  recoverClosedMergeRequests: boolean;
   milestoneMap?: Map<number, SimpleMilestone>;
   users: Set<string>;
   members: Set<string>;
@@ -84,7 +85,8 @@ export class GithubHelper {
     githubApi: GitHubApi,
     githubSettings: GithubSettings,
     gitlabHelper: GitlabHelper,
-    useIssuesForAllMergeRequests: boolean
+    useIssuesForAllMergeRequests: boolean,
+    recoverClosedMergeRequests: boolean,
   ) {
     this.githubApi = githubApi;
     this.githubUrl = githubSettings.baseUrl
@@ -99,6 +101,7 @@ export class GithubHelper {
     this.gitlabHelper = gitlabHelper;
     this.delayInMs = 2000;
     this.useIssuesForAllMergeRequests = useIssuesForAllMergeRequests;
+    this.recoverClosedMergeRequests = recoverClosedMergeRequests;
     this.users = new Set<string>();
 
     this.members = new Set<string>();
@@ -949,14 +952,43 @@ export class GithubHelper {
   /**
    * Create a pull request. A pull request can only be created if both the target and source branches exist on the GitHub
    * repository. In many cases, the source branch is deleted when the merge occurs, and the merge request may not be able
-   * to be migrated. In this case, an issue is created instead with a 'gitlab merge request' label.
+   * to be migrated. In this case, an issue is created instead with a 'gitlab merge request' label 
+   * when `setting.useIssuesForAllMergeRequests` is set `true`.
+   * Otherwise, when `setting.recoverClosedMergeRequests` is set `true`, the deleted branches will be temporarily 
+   * recreated and closed pull request will be added. Eventually temporary branches will be removed.
+   * 
    * @param mergeRequest the GitLab merge request object that we want to duplicate
    * @returns {Promise<Promise<{data: null}>|Promise<Github.Response<Github.PullsCreateResponse>>|Promise<{data: *}>>}
    */
   async createPullRequest(mergeRequest: GitLabMergeRequest) {
     let canCreate = !this.useIssuesForAllMergeRequests;
+    let canRecoverBranches = this.recoverClosedMergeRequests && (mergeRequest.state === 'merged' || mergeRequest.state === 'closed');
+    let recoveredTargetBranch = null;
+    let recoveredSourceBranch = null;
+    let mergeRequestGitlabEntry = null;
 
-    if (canCreate) {
+    // Recover branches when recovery is expected and merge request is closed
+    if (canRecoverBranches) {
+      mergeRequestGitlabEntry = await this.gitlabHelper.getExpandedMergeRequest(mergeRequest.iid);
+      if (!mergeRequestGitlabEntry.diff_refs?.base_sha && !mergeRequestGitlabEntry.sha) {
+        console.error('Could not recover target branch due to missing base_sha!');
+        process.exit(1);
+      }
+      if (!mergeRequestGitlabEntry.diff_refs?.head_sha && !mergeRequestGitlabEntry.sha) {
+        console.error('Could not recover source branch due to missing head_sha!');
+        process.exit(1);
+      }
+
+      recoveredTargetBranch = `migration/mr-${mergeRequest.iid}-${mergeRequest.target_branch}`;
+      mergeRequest.target_branch = recoveredTargetBranch;
+      await this.createBranch(mergeRequest.target_branch, mergeRequestGitlabEntry.diff_refs.base_sha || mergeRequest.sha);
+
+      recoveredSourceBranch = `migration/mr-${mergeRequest.iid}-${mergeRequest.source_branch}`;
+      mergeRequest.source_branch = recoveredSourceBranch;
+      await this.createBranch(mergeRequest.source_branch, mergeRequestGitlabEntry.diff_refs.head_sha || mergeRequest.sha);
+    }
+
+    if (canCreate && !canRecoverBranches) {
       // Check to see if the target branch exists in GitHub - if it does not exist, we cannot create a pull request
       try {
         await this.githubApi.repos.getBranch({
@@ -981,7 +1013,7 @@ export class GithubHelper {
       }
     }
 
-    if (canCreate) {
+    if (canCreate && !canRecoverBranches) {
       // Check to see if the source branch exists in GitHub - if it does not exist, we cannot create a pull request
       try {
         await this.githubApi.repos.getBranch({
@@ -1006,8 +1038,6 @@ export class GithubHelper {
       }
     }
 
-    if (settings.dryRun) return Promise.resolve({ data: mergeRequest });
-
     if (canCreate) {
       let bodyConverted = await this.convertIssuesAndComments(
         mergeRequest.description,
@@ -1031,7 +1061,22 @@ export class GithubHelper {
 
       try {
         // try to create the GitHub pull request from the GitLab issue
-        const response = await this.githubApi.pulls.create(props);
+        let response;
+        if (!settings.dryRun) {
+          response = await this.githubApi.pulls.create(props);
+        } else {
+          console.log(`[DRY RUN] Creating new pull request '${props.title}' for id: ${mergeRequest.iid}`);
+          response = { data: mergeRequest };
+        }
+        
+        // Clean up after close merge request recovery by deleting temporary branches
+        if (recoveredTargetBranch !== null) {
+          await this.deleteBranch(recoveredTargetBranch);
+        }
+        if (recoveredSourceBranch !== null) {
+          await this.deleteBranch(recoveredSourceBranch);
+        }
+
         return Promise.resolve(response);
       } catch (err) {
         if (err.status === 422) {
@@ -1044,6 +1089,8 @@ export class GithubHelper {
         }
       }
     }
+
+    if (settings.dryRun) return Promise.resolve({ data: mergeRequest });
 
     // Failing all else, create an issue with a descriptive title
 
@@ -1110,6 +1157,46 @@ export class GithubHelper {
   // ----------------------------------------------------------------------------
 
   /**
+   * Creates branch in GitHub
+   * 
+   * @param branchName the name of the branch to create
+   * @param sha the SHA of the commit to create the branch from
+   */
+  async createBranch(branchName: string, sha: string) {
+    if (settings.dryRun) {
+      console.log(`[DRY RUN] Creating new branch '${branchName}' on sha: ${sha}`);
+      return Promise.resolve();
+    }
+
+    return await this.githubApi.git.createRef({
+        owner: this.githubOwner,
+        repo: this.githubRepo,
+        ref: `refs/heads/${branchName}`,
+        sha: sha,
+      });
+  }
+  // ----------------------------------------------------------------------------
+
+  /**
+   * Deletes branch in GitHub
+   * 
+   * @param branchName the name of the branch to create
+   */
+  async deleteBranch(branchName: string) {
+    if (settings.dryRun) {
+      console.log(`[DRY RUN] Deleting branch '${branchName}'`);
+      return Promise.resolve();
+    }
+
+    return await this.githubApi.git.deleteRef({
+        owner: this.githubOwner,
+        repo: this.githubRepo,
+        ref: `refs/heads/${branchName}`,
+      });
+  }
+  // ----------------------------------------------------------------------------
+
+  /**
    * Creates the information required for a new review comment.
    * See: https://docs.github.com/en/rest/pulls/comments?apiVersion=2022-11-28#create-a-review-comment-for-a-pull-request
    */
@@ -1118,8 +1205,7 @@ export class GithubHelper {
       !repoLink ||
       !repoLink.startsWith(gitHubLocation) ||
       !position ||
-      !position.head_sha ||
-      !position.line_range
+      !position.head_sha
     ) {
       throw new Error(`Position is invalid: ${JSON.stringify(position)}`);
     }
@@ -1340,6 +1426,10 @@ export class GithubHelper {
     props.assignees = this.convertAssignees(mergeRequest);
     props.milestone = this.convertMilestone(mergeRequest);
     props.labels = this.convertLabels(mergeRequest);
+
+    if (settings.dryRun) {
+      return Promise.resolve();
+    }
 
     return await this.githubApi.issues.update(props);
   }

@@ -64,6 +64,7 @@ export default {
   usePlaceholderIssuesForMissingIssues: true,
   useReplacementIssuesForCreationFails: true,
   useIssuesForAllMergeRequests: false,
+  recoverClosedMergeRequests: false,
   filterByLabel: undefined,
   trimOversizedLabelDescriptions: false,
   skipMergeRequestStates: [],

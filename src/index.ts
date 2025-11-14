@@ -91,7 +91,8 @@ const githubHelper = new GithubHelper(
   githubApi,
   settings.github,
   gitlabHelper,
-  settings.useIssuesForAllMergeRequests
+  settings.useIssuesForAllMergeRequests,
+  settings.recoverClosedMergeRequests
 );
 
 // If no project id is given in settings.js, just return

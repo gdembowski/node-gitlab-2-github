@@ -26,6 +26,7 @@ export default interface Settings {
   usePlaceholderIssuesForMissingIssues: boolean;
   useReplacementIssuesForCreationFails: boolean;
   useIssuesForAllMergeRequests: boolean;
+  recoverClosedMergeRequests: boolean;
   filterByLabel?: string;
   trimOversizedLabelDescriptions: boolean;
   skipMergeRequestStates: string[];

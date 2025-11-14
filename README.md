@@ -247,6 +247,10 @@ It would of course be better to find the cause for migration fails, so that no r
 If this is set to `true` (default is `false`) then all merge requests will be migrated as GitHub issues (rather than pull requests). This can be
 used to sidestep the problem where pull requests are rejected by GitHub if the feature branch no longer exists or has been merged.
 
+### recoverClosedMergeRequests
+
+If this is set to `true` (default is `false`) then all closed merge requests will be migrated as closed GitHub pull requests. Non-existing branches will be temporarily restored to create valid pull requests with the same diff state. Branches will be removed after successful recovery.
+
 ### filterByLabel
 
 Filters all merge requests and issues by these labels. The applicable values can be found in the Gitlab API documentation for [issues](https://docs.gitlab.com/ee/api/issues.html#list-project-issues) and [merge requests](https://docs.gitlab.com/ee/api/merge_requests.html#list-merge-requests) respectively. Default is `null` which returns all issues/merge requests.
