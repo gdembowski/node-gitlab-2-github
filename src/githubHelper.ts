@@ -1235,10 +1235,10 @@ export class GithubHelper {
       head_sha = cherry_picked_commit;
     }
 
-    const start = position.line_range.start;
-    const end = position.line_range.end;
-    const start_line = start.type === 'new' ? start.new_line : start.old_line;
-    const end_line = end.type === 'new' ? end.new_line : end.old_line;
+    const start = position.line_range?.start;
+    const end = position.line_range?.end;
+    const start_line = (start?.type === 'new' ? start?.new_line : start?.old_line) ?? position.old_line ?? position.new_line;
+    const end_line = (end?.type === 'new' ? end?.new_line : end?.old_line) ?? position.old_line ?? position.new_line;
 
     let data = {
       commit_id: head_sha,
@@ -1797,15 +1797,15 @@ export class GithubHelper {
     const ref = path && line ? `${path} line ${line}` : `${head_sha}`;
     let lineRef = `Commented on [${ref}](${repoLink}/compare/${base_sha}..${head_sha}${slug})\n\n`;
 
-    if (position.line_range.start.type === 'new') {
+    if (position.line_range?.start?.type === 'new') {
       const startLine = position.line_range.start.new_line;
       const endLine = position.line_range.end.new_line;
       const lineRange = (startLine !== endLine) ? `L${startLine}-L${endLine}` : `L${startLine}`;
       lineRef += `${repoLink}/blob/${head_sha}/${path}#${lineRange}\n\n`;
     }
     else {
-      const startLine = position.line_range.start.old_line;
-      const endLine = position.line_range.end.old_line;
+      const startLine = position.line_range?.start?.old_line ?? position.old_line ?? position.new_line;
+      const endLine = position.line_range?.end?.old_line ?? position.old_line ?? position.new_line;
       const lineRange = (startLine !== endLine) ? `L${startLine}-L${endLine}` : `L${startLine}`;
       lineRef += `${repoLink}/blob/${head_sha}/${path}#${lineRange}\n\n`;
     }
