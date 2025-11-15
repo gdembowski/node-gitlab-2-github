@@ -467,7 +467,14 @@ async function transferIssues() {
     let githubIssue = githubIssues.find(
       i => i.title.trim() === issue.title.trim() && i.body.includes(issue.web_url)
     );
-    if (!githubIssue) {
+
+    let githubPlaceHolderIssue = 
+      (issue?.isPlaceholder === true) 
+      ? githubIssues.find(i => i.title.trim() === `[PLACEHOLDER] - for issue #${issue.iid}`)
+      : null;
+    
+    // Placeholder issue does not contain web_url in body, so avoid creating redundant placeholders
+    if (!githubIssue && !githubPlaceHolderIssue) {
       console.log(`\nMigrating issue #${issue.iid} ('${issue.title}')...`);
       try {
         // process asynchronous code in sequence -- treats the code sort of like blocking
@@ -496,7 +503,7 @@ async function transferIssues() {
           }
         }
       }
-    } else {
+    } else if (githubIssue !== undefined) {
       console.log(`Updating issue #${issue.iid} - ${issue.title}...`);
       try {
         await githubHelper.updateIssueState(githubIssue, issue);
