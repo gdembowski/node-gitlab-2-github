@@ -501,7 +501,10 @@ async function transferIssues() {
               '\t...ERROR: Could not create replacement issue either!'
             );
           }
+        } else {
+          console.error(`Issue #${issue.iid} cannot be transferred`);
         }
+        process.exit(1);
       }
     } else if (githubIssue !== undefined) {
       console.log(`Updating issue #${issue.iid} - ${issue.title}...`);
