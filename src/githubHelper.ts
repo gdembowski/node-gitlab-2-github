@@ -981,11 +981,21 @@ export class GithubHelper {
 
       recoveredTargetBranch = `migration/mr-${mergeRequest.iid}-${mergeRequest.target_branch}`;
       mergeRequest.target_branch = recoveredTargetBranch;
-      await this.createBranch(mergeRequest.target_branch, mergeRequestGitlabEntry.diff_refs.base_sha || mergeRequest.sha);
+
+      let targetSha = mergeRequestGitlabEntry.diff_refs.base_sha || mergeRequest.sha;
+      if (targetSha.length < 40 && mergeRequestGitlabEntry?.diff_refs?.start_sha) {
+        targetSha = mergeRequestGitlabEntry.diff_refs.start_sha;
+      }
+      await this.createBranch(mergeRequest.target_branch, targetSha);
 
       recoveredSourceBranch = `migration/mr-${mergeRequest.iid}-${mergeRequest.source_branch}`;
       mergeRequest.source_branch = recoveredSourceBranch;
-      await this.createBranch(mergeRequest.source_branch, mergeRequestGitlabEntry.diff_refs.head_sha || mergeRequest.sha);
+      
+      let sourceSha = mergeRequestGitlabEntry.diff_refs.head_sha || mergeRequest.sha;
+      if (sourceSha.length < 40 && mergeRequestGitlabEntry?.diff_refs?.start_sha) {
+        sourceSha = mergeRequestGitlabEntry.diff_refs.start_sha;
+      }
+      await this.createBranch(mergeRequest.source_branch, sourceSha);
     }
 
     if (canCreate && !canRecoverBranches) {
