@@ -1201,7 +1201,7 @@ export class GithubHelper {
     return await this.githubApi.git.deleteRef({
         owner: this.githubOwner,
         repo: this.githubRepo,
-        ref: `refs/heads/${branchName}`,
+        ref: `heads/${branchName}`,
       });
   }
   // ----------------------------------------------------------------------------
