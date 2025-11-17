@@ -1078,14 +1078,6 @@ export class GithubHelper {
           console.log(`[DRY RUN] Creating new pull request '${props.title}' for id: ${mergeRequest.iid}`);
           response = { data: mergeRequest };
         }
-        
-        // Clean up after close merge request recovery by deleting temporary branches
-        if (recoveredTargetBranch !== null) {
-          await this.deleteBranch(recoveredTargetBranch);
-        }
-        if (recoveredSourceBranch !== null) {
-          await this.deleteBranch(recoveredSourceBranch);
-        }
 
         return Promise.resolve(response);
       } catch (err) {
@@ -1098,6 +1090,14 @@ export class GithubHelper {
           throw err;
         }
       }
+    }
+
+    // Clean up after close merge request recovery by deleting temporary branches
+    if (recoveredTargetBranch !== null) {
+      await this.deleteBranch(recoveredTargetBranch);
+    }
+    if (recoveredSourceBranch !== null) {
+      await this.deleteBranch(recoveredSourceBranch);
     }
 
     if (settings.dryRun) return Promise.resolve({ data: mergeRequest });
