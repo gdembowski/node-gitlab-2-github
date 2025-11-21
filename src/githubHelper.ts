@@ -1734,6 +1734,12 @@ export class GithubHelper {
       this.gitlabHelper
     );
 
+    // Remove Gitlab/Github image display parameters, e.g. {width=900 height=360} or {width="220" height="429"}
+    str = str.replace(
+      /(!\[[^\]]*]\([^)]*\))\s*\{width=["']?\d+["']?\s+height=["']?\d+["']?\}/g,
+      '$1'
+    );
+
     if (add_issue_information && settings.conversion.addIssueInformation) {
       let issue = item as GitLabIssue;
       str = await this.addIssueInformation(issue, str)
